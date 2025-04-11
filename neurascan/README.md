@@ -1,2 +1,0 @@
-# NeuraScan
-Scanner matériel multiplateforme
