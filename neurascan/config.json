@@ -1,8 +1,0 @@
-{
-  "smtp_server": "smtp.gmail.com",
-  "smtp_port": 587,
-  "email_sender": "neurascan@gmail.com",
-  "email_password": "8M3!CBY7jr4CabRX",
-  "email_receiver": "faeity.pro@gmail.com",
-  "email_subject_prefix": "NeuraScan"
-}
