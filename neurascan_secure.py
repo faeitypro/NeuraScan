@@ -1,16 +1,33 @@
+import sys
 import os
+
+if getattr(sys, 'frozen', False):
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+
+sys.path.append(os.path.join(base_path, "libraries"))
+sys.path.append(os.path.join(base_path,"libraries/py-cpuinfo-9.0.0"))
+sys.path.append(os.path.join(base_path,"libraries/pycryptodome-3.23.0/lib"))
+sys.path.append(os.path.join(base_path,"libraries/pycryptodome-3.23.0-cp313-cp313t-win_amd64"))
+sys.path.append(os.path.join(base_path,"libraries"))
+sys.path.append(os.path.join(base_path,"libraries/GPUtil-1.4.0/"))
+sys.path.append(os.path.join(base_path,"libraries/WMI-1.5.1"))
+sys.path.append(os.path.join(base_path,"libraries/pywin32-311-cp313-cp313-win_amd64"))
+
 import platform
 import subprocess
-import psutil
-from psutil import cpu_percent, virtual_memory
-import cpuinfo
+import psutil # type: ignore
+from psutil import cpu_percent, virtual_memory # type: ignore
+import cpuinfo # type: ignore
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
+#from Crypto.PublicKey import RSA
+#from Crypto.Cipher import PKCS1_OAEP
 import base64
 import json
 from datetime import datetime
@@ -19,26 +36,15 @@ import GPUtil
 import re
 import zlib
 from tkinter import filedialog
-import wmi
+import _wmi
+import random
+import math
 
-# Génération des clés RSA (à faire une seule fois)
-# from Crypto.PublicKey import RSA
-# key = RSA.generate(1024)
-# private_key = key.export_key()
-# with open("config.key", "wb") as key_file:
-#     key_file.write(private_key)
-# public_key = key.publickey().export_key()
 
 VERSION = "1.0.0"
 
-# Chargement de la clé RSA
-def load_rsa_key():
-    try:
-        with open("config.key", "rb") as key_file:
-            return RSA.import_key(key_file.read())
-    except Exception as e:
-        messagebox.showerror("Erreur", f"Erreur de chargement de la clé RSA:\n{str(e)}")
-        return None
+
+print("hello world")
 
 def get_all_info():
     return {
@@ -48,6 +54,7 @@ def get_all_info():
         'Disques': get_disk_info(),
         'GPU': get_gpu_info(),
         'Numéros de série': get_serial_numbers(),
+        'Températures & Ventilateurs': get_temperatures_and_fans(),
         'Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'Version': VERSION
     }
@@ -64,8 +71,8 @@ def get_system_info():
     }
 
 def get_cpu_info():
-    info = cpuinfo.get_cpu_info()
-    return {
+    """récupère les info du pross"""
+    return{
         'Marque': info.get('brand_raw', 'Inconnu'),
         'Architecture': info.get('arch_string_raw', 'Inconnu'),
         'Fréquence': f"{psutil.cpu_freq().current:.2f} MHz" if psutil.cpu_freq() else 'Inconnu',
@@ -114,13 +121,15 @@ def get_gpu_info():
     except:
         return None
 
+
+
 def get_serial_numbers():
     """Récupère les numéros de série des composants"""
     serials = {}
     
     # CPU
     if platform.system() == 'Windows':
-        c = wmi.WMI()
+        c = _wmi.WMI()
         for processor in c.Win32_Processor():
             serials['CPU'] = processor.ProcessorId.strip()
     elif platform.system() == 'Linux':
@@ -134,7 +143,7 @@ def get_serial_numbers():
     
     # Carte mère
     if platform.system() == 'Windows':
-        c = wmi.WMI()
+        c = _wmi.WMI()
         for board in c.Win32_BaseBoard():
             serials['Carte mère'] = board.SerialNumber.strip()
     elif platform.system() == 'Linux':
@@ -149,7 +158,7 @@ def get_serial_numbers():
     
     # Disques
     if platform.system() == 'Windows':
-        c = wmi.WMI()
+        c = _wmi.WMI()
         for disk in c.Win32_DiskDrive():
             serials[f'Disque {disk.Index}'] = disk.SerialNumber.strip()
     elif platform.system() == 'Linux':
@@ -166,211 +175,143 @@ def get_serial_numbers():
     
     return serials if serials else None
 
-# Fonction d'envoi d'email
-def send_email(info, recipient_email=None):
+def get_temperatures_and_fans():
+    """Récupère les températures et les informations des ventilateurs"""
+    temp_info = {}
+    fan_info = {}
     try:
-        private_key = load_rsa_key()
-        if not private_key:
-            return False
-        
-        # Décryptage des informations SMTP
-        cipher = PKCS1_OAEP.new(private_key)
-        smtp_config = {
-            'sender': cipher.decrypt(base64.b64decode(SMTP_SENDER)).decode(),
-            'password': cipher.decrypt(base64.b64decode(SMTP_PASSWORD)).decode(),
-            'server': cipher.decrypt(base64.b64decode(SMTP_SERVER)).decode(),
-            'port': int(cipher.decrypt(base64.b64decode(SMTP_PORT)).decode())
-        }
-        
-        # Préparation du message
-        msg = MIMEMultipart()
-        msg['From'] = smtp_config['sender']
-        msg['To'] = recipient_email if recipient_email else smtp_config['sender']
-        msg['Subject'] = f"NeurAScan Rapport - {datetime.now().strftime('%Y-%m-%d')}"
-        
-        # Corps du message
-        body = f"Rapport NeurAScan v{VERSION}\n\n"
-        body += f"Date: {info['Date']}\n"
-        body += f"Système: {info['Système']['Système']} {info['Système']['Version']}\n"
-        body += f"Processeur: {info['CPU']['Marque']}\n"
-        
-        msg.attach(MIMEText(body, 'plain'))
-        
-        # Pièce jointe JSON
-        attachment = MIMEText(json.dumps(info, indent=4), 'plain')
-        attachment.add_header('Content-Disposition', 'attachment', 
-                           filename=f"neurascan_report_{info['Date'].replace(':', '-')}.json")
-        msg.attach(attachment)
-        
-        # Envoi
-        with smtplib.SMTP_SSL(smtp_config['server'], smtp_config['port']) as server:
-            server.login(smtp_config['sender'], smtp_config['password'])
-            server.send_message(msg)
-            return True
-            
+        temps = psutil.sensors_temperatures()
+        for name, entries in temps.items():
+            temp_info[name] = [
+                {
+                    'label': entry.label or '',
+                    'current': entry.current,
+                    'high': entry.high,
+                    'critical': entry.critical
+                } for entry in entries
+            ]
     except Exception as e:
-        messagebox.showerror("Erreur", f"Échec de l'envoi:\n{str(e)}")
-        return False
+        temp_info['Erreur'] = str(e)
+    try:
+        fans = psutil.sensors_fans()
+        for name, entries in fans.items():
+            fan_info[name] = [
+                {
+                    'label': entry.label or '',
+                    'current': entry.current
+                } for entry in entries
+            ]
+    except Exception as e:
+        fan_info['Erreur'] = str(e)
+    return {'Températures': temp_info, 'Ventilateurs': fan_info}
 
-# Interface graphique
-class NeurAScanApp:
-    def __init__(self, root):
-        self.root = root
-        self.setup_ui()
-        
-    def setup_ui(self):
-        self.root.title(f"NeurAScan v{VERSION}")
-        self.root.geometry("1000x700")
-        
-        # Frame principal
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Boutons
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill=tk.X, pady=5)
-        
-        ttk.Button(btn_frame, text="Scanner", command=self.scan).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Envoyer par email", command=self.send_email).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Sauvegarder", command=self.save_report).pack(side=tk.LEFT, padx=5)
-        
-        # Notebook (onglets)
-        self.notebook = ttk.Notebook(main_frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Création des onglets
-        self.create_tabs()
-        
-    def create_tabs(self):
-        """Crée les onglets pour chaque catégorie d'information"""
-        self.tabs = {
-            'Système': ttk.Frame(self.notebook),
-            'CPU': ttk.Frame(self.notebook),
-            'RAM': ttk.Frame(self.notebook),
-            'Disques': ttk.Frame(self.notebook),
-            'GPU': ttk.Frame(self.notebook),
-            'Numéros de série': ttk.Frame(self.notebook)
-        }
-        
-        for name, tab in self.tabs.items():
-            self.notebook.add(tab, text=name)
-            
-            # Treeview pour afficher les données
-            tree = ttk.Treeview(tab)
-            tree.pack(fill=tk.BOTH, expand=True)
-            
-            # Scrollbars
-            yscroll = ttk.Scrollbar(tab, orient=tk.VERTICAL, command=tree.yview)
-            yscroll.pack(side=tk.RIGHT, fill=tk.Y)
-            tree.configure(yscrollcommand=yscroll.set)
-            
-            # Configuration des colonnes
-            if name == 'Disques':
-                tree['columns'] = ('Device', 'Point de montage', 'Type', 'Total', 'Utilisé', 'Libre')
-                for col in tree['columns']:
-                    tree.heading(col, text=col)
-                    tree.column(col, width=100)
-            elif name == 'Numéros de série':
-                tree['columns'] = ('Composant', 'Numéro')
-                for col in tree['columns']:
-                    tree.heading(col, text=col)
-                    tree.column(col, width=200)
-            else:
-                tree['columns'] = ('Propriété', 'Valeur')
-                for col in tree['columns']:
-                    tree.heading(col, text=col)
-                    tree.column(col, width=150)
-    
-    def scan(self):
-        """Lance le scan du système"""
-        info = get_all_info()
-        self.display_info(info)
-        messagebox.showinfo("Scan terminé", "L'analyse système est complète")
-    
-    def display_info(self, info):
-        """Affiche les informations dans les onglets"""
-        for tab_name in self.tabs:
-            tree = self.notebook.nametowidget(self.tabs[tab_name].winfo_children()[0])
-            tree.delete(*tree.get_children())
-            
-            if tab_name == 'Système':
-                for k, v in info['Système'].items():
-                    tree.insert('', tk.END, values=(k, v))
-            elif tab_name == 'CPU':
-                for k, v in info['CPU'].items():
-                    tree.insert('', tk.END, values=(k, v))
-            elif tab_name == 'RAM':
-                for k, v in info['RAM'].items():
-                    tree.insert('', tk.END, values=(k, v))
-            elif tab_name == 'Disques':
-                for disk in info['Disques']:
-                    tree.insert('', tk.END, values=(
-                        disk['Device'],
-                        disk['Point de montage'],
-                        disk['Type'],
-                        disk['Total'],
-                        disk['Utilisé'],
-                        disk['Libre']
-                    ))
-            elif tab_name == 'GPU' and info['GPU']:
-                for gpu in info['GPU']:
-                    for k, v in gpu.items():
-                        tree.insert('', tk.END, values=(k, v))
-            elif tab_name == 'Numéros de série' and info['Numéros de série']:
-                for k, v in info['Numéros de série'].items():
-                    tree.insert('', tk.END, values=(k, v))
-    
-    def send_email(self):
-        """Envoie le rapport par email"""
-        if not hasattr(self, 'last_scan_info'):
-            messagebox.showwarning("Aucun scan", "Veuillez d'abord scanner le système")
-            return
-            
-        # Fenêtre pour entrer l'email
-        email_dialog = tk.Toplevel(self.root)
-        email_dialog.title("Envoyer le rapport")
-        email_dialog.geometry("400x200")
-        
-        ttk.Label(email_dialog, text="Adresse email du destinataire:").pack(pady=10)
-        
-        email_var = tk.StringVar()
-        email_entry = ttk.Entry(email_dialog, textvariable=email_var, width=40)
-        email_entry.pack(pady=5)
-        
-        def send():
-            if send_email(self.last_scan_info, email_var.get()):
-                messagebox.showinfo("Succès", "Rapport envoyé avec succès")
-            email_dialog.destroy()
-        
-        ttk.Button(email_dialog, text="Envoyer", command=send).pack(pady=10)
-    
-    def save_report(self):
-        """Sauvegarde le rapport dans un fichier"""
-        if not hasattr(self, 'last_scan_info'):
-            messagebox.showwarning("Aucun scan", "Veuillez d'abord scanner le système")
-            return
-            
-        filename = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("Fichiers JSON", "*.json")],
-            initialfile=f"neurascan_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        )
-        
-        if filename:
-            try:
-                with open(filename, 'w') as f:
-                    json.dump(self.last_scan_info, f, indent=4)
-                messagebox.showinfo("Succès", f"Rapport sauvegardé sous:\n{filename}")
-            except Exception as e:
-                messagebox.showerror("Erreur", f"Échec de la sauvegarde:\n{str(e)}")
 
-# Configuration SMTP cryptée (générée avec generate_smtp_config.py)
-SMTP_SERVER = b'gxu1X8fXABZB6QKzvbXMS8EvKSfL+sTFBMn+hlPBGY2gglbGEIbxl3Je/VU6z9RLvT2wkwuYGWqwCt+xRI5YYxsaBnJLDTnC3xmeuMFEPN6FgwrC7S2/KMKq5JaA2scCDIQAziu8ntd54oIAyl96ZePtu7670JbGo389ZeGIrWw='
-SMTP_PORT = b'd2lvK8lX322L2vwQTcU6sgdQXhE6N5Rzz9fDDiQMhEJ+U8HyCgmiIQqlFgBujorp1wnK3pJ8RoBpe3yhGPAFdiQGCvAkOQ+6Uy8gV9t2RfHB8PYu6LclHFaJC2kwrQUWRIK/O7rFk9OH6SaWOU1pI2xmcW8NYLFgZK1iuRJiWtg='
-SMTP_SENDER = b'Xx208Pn4eal3GVCxsKxVJhySDhfWmSyY09aL6JhW16iHZ6QOrVj8LRGLg7TLK1w14yG3X0RIK3fjfA/cnxdiXnPjugQ3TcEyK25u3flmH/Px651EB/+Rw+pZZu7/v7wUcU3W/WpDHKxOD+gfTbFWK+6WPho6928RCwlG+z5gqbQ='
-SMTP_PASSWORD = b'CrgudYwblu7Wk9jIApQmw26mmWbiaEkcsuVSAbaBX4oroDhzuezah6LHv4Jxthvl0ZlyY+W/shJiqa5u/VoJ9+o+sz5T3DId4eR79nQjzLl3alXVjYbpcPOY27PMvvGzXl1OxQO1hzM4w2utYuUgsNIzpFKgE9rPmfcxZXbPlfs='
+
+#///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+class NeuraScanApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("NeuraScan")
+        #self.iconbitmap("icone.ico")  # remplace si nécessaire
+        try:
+            self.state('zoomed')  # Windows
+        except:
+            self.attributes('-fullscreen', True)
+        self.configure(bg="#cfeaf2")  # fond clair comme l'image
+
+        self.canvas = tk.Canvas(self, width=800, height=600, bg="#cfeaf2", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+
+        self.canvas.create_text(400, 40, text="NeuraScan", fill="#3a3a3a", font=("Segoe UI", 30, "bold"))
+        self.draw_brain(center_x= 300, center_y= 400)
+        self.demi_cercle(500, 300, 200, 150, "top", "purple", "purple", 2)
+
+    def draw_brain(self, center_x, center_y):
+        # Forme du cerveau relative au centre (0,0)
+        brain_outline_relative = [
+            (0, 100), (-110, -50), (-100, -80), (-90, -100),
+            (-60, -120), (-30, -130), (10, -120), (50, -130),
+            (90, -120), (110, -90), (120, -60), (110, -30),
+            (130, 10), (130, 50), (110, 80), (90, 110),
+            (70, 130), (50, 150), (30, 160), (10, 150),
+            (-10, 130), (-30, 110), (-50, 80), (-60, 50),
+            (-70, 20)
+        ]
+        
+        # Translate les coordonnées pour centrer sur le point donné
+        brain_outline = [(x + center_x, y + center_y) for x, y in brain_outline_relative]
+        
+        self.canvas.create_polygon(brain_outline, fill="#5e6ad2", outline="#3f4bb8", 
+                                 width=3, smooth=True)
+        
+    
+        # Génère des nœuds à l’intérieur de la forme
+        nodes = []
+        for _ in range(30):
+            while True:
+                x = random.randint(310, 470)
+                y = random.randint(110, 360)
+                if self.point_in_brain(x, y):
+                    nodes.append((x, y))
+                    break
+
+        # Dessine les connexions
+        for i, (x1, y1) in enumerate(nodes):
+            for j in range(i + 1, len(nodes)):
+                x2, y2 = nodes[j]
+                if self.distance(x1, y1, x2, y2) < 70:
+                    self.canvas.create_line(x1, y1, x2, y2, fill="#4e4e9c", width=1)
+
+        # Dessine les nœuds
+        for x, y in nodes:
+            self.canvas.create_oval(x-4, y-4, x+4, y+4, fill="#88c0d0", outline="#2e3440")
+    def demi_cercle(self, x, y, width=200, height=150, orientation="top", fill_color="purple", outline_color="purple", line_width=2):
+    # Crée une demi-ellipse (Arc + ligne de base)
+    # Calcul des coordonnées du rectangle englobant
+        x1, y1 = x - width//2, y - height//2
+        x2, y2 = x + width//2, y + height//2
+    
+    # Définition des angles et lignes selon l'orientation
+        if orientation == "top":
+            start, extent = 0, 180
+            line_coords = (x1, y, x2, y)
+        elif orientation == "bottom":
+            start, extent = 180, 180
+            line_coords = (x1, y, x2, y)
+        elif orientation == "right":
+            start, extent = 270, 180
+            line_coords = (x, y1, x, y2)
+        elif orientation == "left":
+            start, extent = 90, 180
+            line_coords = (x, y1, x, y2)
+        else:
+            start, extent = 0, 180
+            line_coords = (x1, y, x2, y)
+        
+    # Dessine l'arc avec remplissage
+        arc = self.canvas.create_arc(x1, y1, x2, y2, 
+                                    start=start, extent=extent, 
+                                    fill=fill_color, outline=outline_color, 
+                                    width=line_width, style="pieslice")
+        
+        # Dessine la ligne de base
+        line = self.canvas.create_line(line_coords[0], line_coords[1], 
+                                    line_coords[2], line_coords[3], 
+                                    fill=outline_color, width=line_width)
+        
+        return arc, line
+
+
+    def point_in_brain(self, x, y):
+        # Délimitation simplifiée du cerveau pour filtrer les points
+        return 310 <= x <= 470 and 110 <= y <= 370
+
+    def distance(self, x1, y1, x2, y2):
+        return math.hypot(x2 - x1, y2 - y1)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = NeurAScanApp(root)
-    root.mainloop()
+    app = NeuraScanApp()
+    app.mainloop()
