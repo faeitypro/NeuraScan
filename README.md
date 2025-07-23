@@ -1,5 +1,5 @@
 # NeuraScan
-NeuraScan is a powerful cross-platform diagnostic tool designed to retrieve comprehensive hardware and system information from any machine—whether it runs on Windows, Linux, or macOS.
+NeuraScan is a powerful cross-platform diagnostic tool designed to retrieve comprehensive hardware and system information from any machine—whether it runs on Windows, Linux, or macOS. this is not a configuration or gestion app is an material information app.
 
 🔍 Features:
 ✅ CPU, GPU, RAM, and Disk Information
@@ -11,11 +11,13 @@ NeuraScan is a powerful cross-platform diagnostic tool designed to retrieve comp
 🖥️ Available as both CLI (console) and GUI
 
 📦 Ideal for:
-Tech support & diagnostics
-Hardware inventory
-Monitoring and logging system health
+Tech support & diagnostics.
+Hardware inventory.
+Checking and logging system health
 
 📁 Easy to use:
-Lightweight
-No admin privileges required for basic use
-Ready-to-compile in Visual Studio (Windows) or portable to CMake (Linux/macOS)
+Lightweight.
+No admin privileges required for basic use.
+easy to use and we find our way around easily.
+
+in developpement he have a report send by E-mail if you have connection.
