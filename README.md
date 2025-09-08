@@ -4,11 +4,11 @@ NeuraScan is a cross-platform diagnostic tool designed to retrieve comprehensive
 🔍 Features:
 ✅ CPU, GPU, RAM, and Disk Information
 🔐 Serial numbers of key components
-🌡️ Real-time temperature and fan speed monitoring
-📤 Export results to .txt and .json formats
-📧 Automatic email reports (configurable)
+🌡️ Real-time temperature and fan speed monitoring (in a second time)
+📤 Export results to .txt and .json formats (in a second time too)
+📧 Automatic email reports (configurable) ( in a third time)
 🌐 Version checking and auto-update notifications
-🖥️ Available as both CLI (console) and GUI
+🖥️ Available as both CLI (console) and GUI (in the third time too)
 
 📦 Ideal for:
 Tech support & diagnostics.
